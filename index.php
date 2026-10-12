@@ -1,249 +1,185 @@
 <?php
 /** @var mysqli $conn */
 session_start();
-include('includes/config.php');
+include 'includes/config.php';
+include 'includes/auth.php';
 
-$page = "menu";
-include('includes/header.php');
-
-// all flavors (available ones first)
-$flavors = mysqli_query($conn, "SELECT * FROM flavor ORDER BY is_available DESC, name");
-
-// the first available flavor is shown as the big featured card
-$result = mysqli_query($conn, "SELECT flavor_id FROM flavor WHERE is_available = 1 ORDER BY name LIMIT 1");
-$first = mysqli_fetch_assoc($result);
-$featuredId = 0;
-if ($first) {
-    $featuredId = $first['flavor_id'];
+if (is_logged_in()) {
+    $home = ($_SESSION['user_role'] ?? '') === 'admin'
+        ? '/takoyaki-shop-infoman/admin/flavors/index.php'
+        : '/takoyaki-shop-infoman/menu.php';
+    header('Location: ' . $home);
+    exit();
 }
 
-// ---------- cart ----------
-$cartLines = array();
-$subtotal = 0;
-if (isset($_SESSION['cart'])) {
-    foreach ($_SESSION['cart'] as $key => $item) {
-        $sizeId = (int)$item['size_id'];
-        $result = mysqli_query($conn, "SELECT fs.size_label, fs.price, f.name
-                                       FROM flavor_size fs
-                                       INNER JOIN flavor f ON f.flavor_id = fs.flavor_id
-                                       WHERE fs.size_id = $sizeId");
-        $size = mysqli_fetch_assoc($result);
-        if (!$size) {
-            continue; // the size was deleted
+$featuredFlavors = [
+    ['name' => 'Original Takoyaki', 'description' => 'Classic savory bites with crispy edges and rich sauce.'],
+    ['name' => 'Cheese Takoyaki', 'description' => 'Golden, melty, and irresistibly creamy.'],
+    ['name' => 'Spicy Takoyaki', 'description' => 'A bolder kick finished with chili glaze.'],
+    ['name' => 'Mentaiko Takoyaki', 'description' => 'Deep savory flavor with a smooth seafood finish.'],
+];
+
+if (isset($conn) && $conn) {
+    $featuredResult = mysqli_query($conn, 'SELECT name, description, image FROM flavor WHERE is_available = 1 ORDER BY name LIMIT 4');
+    if ($featuredResult && mysqli_num_rows($featuredResult) > 0) {
+        $featuredFlavors = [];
+        while ($row = mysqli_fetch_assoc($featuredResult)) {
+            $featuredFlavors[] = $row;
         }
-
-        // add-ons of this cart line
-        $addonNames = array();
-        $addonTotal = 0;
-        foreach ($item['addons'] as $addonId) {
-            $result = mysqli_query($conn, "SELECT name, price FROM addon WHERE addon_id = " . (int)$addonId . " AND is_available = 1");
-            $addon = mysqli_fetch_assoc($result);
-            if ($addon) {
-                $addonNames[] = $addon['name'];
-                $addonTotal += $addon['price'];
-            }
-        }
-
-        $lineTotal = ($size['price'] + $addonTotal) * $item['qty'];
-        $subtotal += $lineTotal;
-
-        $cartLines[] = array(
-            'key' => $key,
-            'name' => $size['name'],
-            'size' => $size['size_label'],
-            'addons' => implode(", ", $addonNames),
-            'qty' => $item['qty'],
-            'total' => $lineTotal
-        );
     }
 }
-
-$orderType = "delivery";
-if (isset($_SESSION['order_type'])) {
-    $orderType = $_SESSION['order_type'];
-}
-
-$deliveryFee = 0;
-if ($orderType == "delivery") {
-    $deliveryFee = $settings['delivery_fee'];
-}
-$total = $subtotal + $deliveryFee;
 ?>
-
-<div class="hero">
-    <div>
-        <div class="eyebrow">Made fresh to order</div>
-        <h2>Good food, made fresh.<br>Takoyaki worth sharing.</h2>
-        <p>Choose your favorite flavor, pick a size, and we'll prepare it fresh for you.</p>
-    </div>
-    <div class="hero-mark"><img src="<?= $base ?>/images/takoyaki_logo.jpg" alt="Takoyaki" class="hero-logo"></div>
-</div>
-
-<?php include('includes/alert.php'); ?>
-
-<div class="layout">
-    <section>
-        <div class="products">
-            <?php
-            if (mysqli_num_rows($flavors) == 0) {
-                echo "<div class='panel empty' style='grid-column:1/-1'>No menu items yet. Please check back soon.</div>";
-            }
-
-            while ($f = mysqli_fetch_assoc($flavors)) {
-                $flavorId = $f['flavor_id'];
-
-                // sizes and add-ons of this card
-                $sizes = mysqli_query($conn, "SELECT * FROM flavor_size WHERE flavor_id = $flavorId ORDER BY price");
-                $addons = mysqli_query($conn, "SELECT * FROM addon WHERE is_available = 1 ORDER BY name");
-                $hasSizes = (mysqli_num_rows($sizes) > 0);
-                $canOrder = ($f['is_available'] == 1 && $hasSizes);
-
-                $cardClass = "product";
-                if ($flavorId == $featuredId) {
-                    $cardClass .= " featured";
-                }
-                if ($f['is_available'] == 0) {
-                    $cardClass .= " sold";
-                }
-            ?>
-                <article class="<?= $cardClass ?>">
-                    <div class="food-photo">
-                        <?php if ($f['image']) { ?>
-                            <img src="<?= $base . '/' . $f['image'] ?>" alt="">
-                        <?php } else { ?>
-                          <img src="<?= $base ?>/images/takoyaki_logo.jpg" alt="">
-                        <?php } ?>
-                        <?php if ($f['is_available'] == 0) { ?>
-                            <div class="sold-overlay">Sold Out</div>
-                        <?php } ?>
-                    </div>
-
-                    <div class="product-content">
-                        <div class="product-head">
-                            <h3><?= htmlspecialchars($f['name']) ?></h3>
-                        </div>
-                        <p class="product-desc"><?= htmlspecialchars($f['description']) ?></p>
-
-                        <form action="cart_update.php" method="POST" style="display:contents">
-                            <input type="hidden" name="action" value="add">
-
-                            <?php if ($hasSizes) { ?>
-                                <div>
-                                    <label>Choose a size</label>
-                                    <div class="sizes">
-                                        <?php
-                                        $first = true;
-                                        while ($s = mysqli_fetch_assoc($sizes)) {
-                                            $ok = ($f['is_available'] == 1 && $s['is_available'] == 1);
-                                        ?>
-                                            <label class="size-option">
-                                                <input type="radio" name="size_id" value="<?= $s['size_id'] ?>"
-                                                    <?php if ($ok && $first) { echo "checked"; $first = false; } ?>
-                                                    <?php if (!$ok) echo "disabled"; ?>>
-                                                <strong><?= $s['size_label'] ?></strong>₱<?= number_format($s['price'], 2) ?>
-                                            </label>
-                                        <?php } ?>
-                                    </div>
-                                </div>
-                            <?php } else { ?>
-                                <p class="tiny muted">No sizes available yet.</p>
-                            <?php } ?>
-
-                            <?php if ($canOrder && mysqli_num_rows($addons) > 0) { ?>
-                                <div>
-                                    <label>Optional toppings and extras</label>
-                                    <div class="toppings">
-                                        <?php while ($a = mysqli_fetch_assoc($addons)) { ?>
-                                            <label class="topping">
-                                                <input type="checkbox" name="addons[]" value="<?= $a['addon_id'] ?>">
-                                                <?= htmlspecialchars($a['name']) ?> +₱<?= number_format($a['price'], 2) ?>
-                                            </label>
-                                        <?php } ?>
-                                    </div>
-                                </div>
-                            <?php } ?>
-
-                            <div class="product-actions">
-                                <input type="number" name="qty" min="1" max="99" value="1" <?php if (!$canOrder) echo "disabled"; ?>>
-                                <button type="submit" <?php if (!$canOrder) echo "disabled"; ?>>＋ Add to Cart</button>
-                            </div>
-                        </form>
-                    </div>
-                </article>
-            <?php } ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Takoyaki Shop</title>
+    <link rel="stylesheet" href="/takoyaki-shop-infoman/includes/style.css">
+</head>
+<body class="landing-body">
+<div class="topline"></div>
+<div class="landing-shell">
+    <header class="landing-header">
+        <div class="brand">
+            <div class="brand-mark">た</div>
+            <div><strong>Takoyaki Shop</strong><small>Fresh from our griddle</small></div>
         </div>
-    </section>
+        <nav class="landing-nav">
+            <a href="#home">Home</a>
+            <a href="#flavors">Flavors</a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
+        </nav>
+        <div class="landing-actions">
+            <a class="btn ghost" href="/takoyaki-shop-infoman/login.php">Sign In</a>
+            <a class="btn" href="/takoyaki-shop-infoman/register.php">Create Account</a>
+        </div>
+    </header>
 
-    <!-- Cart -->
-    <aside class="panel cart-panel" id="cartPanel">
-        <h2>Your Cart <span class="muted tiny">(<?= $cartCount ?> items)</span></h2>
+    <main class="landing-main" id="home">
+        <section class="hero-banner">
+            <div class="hero-copy">
+                <div class="eyebrow">Freshly made daily</div>
+                <h1>Hot, Fresh, and Made to Make You Smile!</h1>
+                <p>Takoyaki Shop serves warm, golden bites with crispy edges, rich sauces, and the kind of comfort that feels like home.</p>
+                <div class="hero-actions">
+                    <a class="btn" href="/takoyaki-shop-infoman/login.php">Order Now</a>
+                    <a class="btn secondary" href="/takoyaki-shop-infoman/register.php">Create account</a>
+                </div>
+                <div class="hero-stats">
+                    <div><strong>4.9★</strong><span>Customer love</span></div>
+                    <div><strong>15 min</strong><span>Average prep</span></div>
+                    <div><strong>100%</strong><span>Fresh grilled</span></div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <img src="/takoyaki-shop-infoman/images/takoyaki_logo.jpg" alt="Takoyaki platter">
+            </div>
+        </section>
 
-        <?php if (count($cartLines) > 0) { ?>
-            <form action="cart_update.php" method="POST" class="field">
-                <input type="hidden" name="action" value="set_type">
-                <label for="order_type">Order type</label>
-                <select id="order_type" name="order_type" onchange="this.form.submit()">
-                    <option value="delivery" <?php if ($orderType == "delivery") echo "selected"; ?>>Delivery</option>
-                    <option value="pickup" <?php if ($orderType == "pickup") echo "selected"; ?>>Pick-up</option>
-                    <option value="dine-in" <?php if ($orderType == "dine-in") echo "selected"; ?>>Dine-in</option>
-                </select>
-            </form>
+        <section class="feature-strip">
+            <article>
+                <span>🌭</span>
+                <div>
+                    <strong>Signature Bites</strong>
+                    <small>Original, cheesy, and spicy favorites</small>
+                </div>
+            </article>
+            <article>
+                <span>🔥</span>
+                <div>
+                    <strong>Freshly Grilled</strong>
+                    <small>Made to order with a crisp finish</small>
+                </div>
+            </article>
+            <article>
+                <span>🚚</span>
+                <div>
+                    <strong>Fast Delivery</strong>
+                    <small>Ready for pickup or doorstep delivery</small>
+                </div>
+            </article>
+        </section>
 
-            <div class="cart-items">
-                <?php foreach ($cartLines as $line) { ?>
-                    <div class="cart-item">
-                        <div class="cart-item-head">
-                            <span><?= htmlspecialchars($line['name']) ?></span>
-                            <span>₱<?= number_format($line['total'], 2) ?></span>
+        <section class="content-section" id="flavors">
+            <div class="section-header">
+                <div>
+                    <div class="eyebrow">Featured flavors</div>
+                    <h2>Popular Takoyaki Picks</h2>
+                </div>
+                <a href="/takoyaki-shop-infoman/login.php" class="btn ghost">View menu</a>
+            </div>
+
+            <div class="flavor-grid">
+                <?php foreach ($featuredFlavors as $flavor) { ?>
+                    <article class="flavor-card">
+                        <div class="flavor-image">
+                            <?php if (!empty($flavor['image'])) { ?>
+                                <img src="/takoyaki-shop-infoman/<?= htmlspecialchars($flavor['image']) ?>" alt="<?= htmlspecialchars($flavor['name']) ?>">
+                            <?php } else { ?>
+                                <img src="/takoyaki-shop-infoman/images/takoyaki_logo.jpg" alt="<?= htmlspecialchars($flavor['name']) ?>">
+                            <?php } ?>
                         </div>
-                        <small>
-                            <?= $line['size'] ?>
-                            <?php if ($line['addons'] != "") { echo " · " . htmlspecialchars($line['addons']); } ?>
-                        </small>
-                        <div class="qty">
-                            <form action="cart_update.php" method="POST">
-                                <input type="hidden" name="action" value="update">
-                                <input type="hidden" name="key" value="<?= $line['key'] ?>">
-                                <input type="hidden" name="qty" value="<?= $line['qty'] - 1 ?>">
-                                <button type="submit">−</button>
-                            </form>
-                            <strong><?= $line['qty'] ?></strong>
-                            <form action="cart_update.php" method="POST">
-                                <input type="hidden" name="action" value="update">
-                                <input type="hidden" name="key" value="<?= $line['key'] ?>">
-                                <input type="hidden" name="qty" value="<?= $line['qty'] + 1 ?>">
-                                <button type="submit">+</button>
-                            </form>
-                            <form action="cart_update.php" method="POST">
-                                <input type="hidden" name="action" value="remove">
-                                <input type="hidden" name="key" value="<?= $line['key'] ?>">
-                                <button type="submit" class="ghost small">Remove</button>
-                            </form>
+                        <div class="flavor-info">
+                            <h3><?= htmlspecialchars($flavor['name']) ?></h3>
+                            <p><?= htmlspecialchars($flavor['description']) ?></p>
+                            <span class="pill">Best seller</span>
                         </div>
-                    </div>
+                    </article>
                 <?php } ?>
             </div>
+        </section>
 
-            <div class="summary-line"><span>Subtotal</span><strong>₱<?= number_format($subtotal, 2) ?></strong></div>
-            <div class="summary-line">
-                <span><?php if ($orderType == "delivery") { echo "Delivery fee"; } else { echo "Service fee"; } ?></span>
-                <strong>₱<?= number_format($deliveryFee, 2) ?></strong>
-            </div>
-
-            <?php if ($orderType == "delivery" && $subtotal < $settings['min_order_for_delivery']) { ?>
-                <div class="notice">
-                    Minimum delivery order is ₱<?= number_format($settings['min_order_for_delivery'], 2) ?>.
-                    Add ₱<?= number_format($settings['min_order_for_delivery'] - $subtotal, 2) ?> more.
+        <section class="promo-row">
+            <div class="promo-card large">
+                <div>
+                    <div class="eyebrow">Limited-time offer</div>
+                    <h3>Enjoy a sizzling combo for sharing.</h3>
                 </div>
-            <?php } ?>
+                <a class="btn" href="/takoyaki-shop-infoman/login.php">Get the deal</a>
+            </div>
+            <div class="promo-card small">
+                <div class="eyebrow">Chef favorite</div>
+                <h3>Cheese Burst</h3>
+                <p>Rich and gooey with a golden finish.</p>
+            </div>
+        </section>
 
-            <div class="summary-line total"><span>Total</span><strong>₱<?= number_format($total, 2) ?></strong></div>
-            <a class="btn full" href="checkout.php">Proceed to Checkout →</a>
-            <p class="tiny muted">You can review your order before confirming.</p>
-        <?php } else { ?>
-            <div class="empty">Your cart is empty.<br><span class="tiny">Choose something delicious to get started.</span></div>
-        <?php } ?>
-    </aside>
+        <section class="content-section about-section" id="about">
+            <div class="about-card">
+                <div class="eyebrow">Our story</div>
+                <h2>Fresh bites, warm hospitality, and street-food joy.</h2>
+                <p>From classic original flavors to bold specialty bites, Takoyaki Shop brings the spirit of Japanese street food to your everyday cravings. Every batch is prepared fresh, served hot, and made to share.</p>
+            </div>
+            <div class="about-highlight">
+                <div class="badge">Made fresh</div>
+                <div class="badge">Premium ingredients</div>
+                <div class="badge">Fast and friendly service</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="landing-footer" id="contact">
+        <div>
+            <h3>Takoyaki Shop</h3>
+            <p>Fresh takoyaki, grilled daily, served with a smile.</p>
+        </div>
+        <div>
+            <h4>Contact</h4>
+            <p>hello@takoyakishop.com</p>
+            <p>+63 912 345 6789</p>
+        </div>
+        <div>
+            <h4>Opening Hours</h4>
+            <p>Mon - Sun</p>
+            <p>10:00 AM - 8:00 PM</p>
+        </div>
+        <div>
+            <h4>Follow us</h4>
+            <p>Instagram · Facebook · TikTok</p>
+        </div>
+    </footer>
 </div>
-
-<?php include('includes/footer.php'); ?>
+</body>
+</html>

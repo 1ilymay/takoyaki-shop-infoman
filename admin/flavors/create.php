@@ -1,7 +1,9 @@
 <?php
 session_start();
 include('../../includes/config.php');
-// TODO: check if admin is logged in
+include('../../includes/auth.php');
+
+require_admin();
 
 $page = "admin";
 $adminPage = "menu";

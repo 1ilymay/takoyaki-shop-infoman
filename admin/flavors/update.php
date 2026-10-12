@@ -2,46 +2,86 @@
 /** @var mysqli $conn */
 session_start();
 include('../../includes/config.php');
-// TODO: check if admin is logged in
+include('../../includes/auth.php');
 
-$id = (int)$_POST['id'];
-$name = trim($_POST['name']);
-$description = trim($_POST['description']);
-$available = (int)$_POST['is_available'];
+require_admin();
 
-if ($name == "") {
+if (!isset($conn) || !$conn) {
+    $_SESSION['message'] = "Database connection failed. Please try again later.";
+    $_SESSION['msg_type'] = "danger";
+    header("Location: index.php");
+    exit();
+}
+
+$id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+$name = trim($_POST['name'] ?? '');
+$description = trim($_POST['description'] ?? '');
+$available = isset($_POST['is_available']) ? (int)$_POST['is_available'] : 1;
+
+if ($id <= 0) {
+    $_SESSION['message'] = "Invalid menu item.";
+    $_SESSION['msg_type'] = "danger";
+    header("Location: index.php");
+    exit();
+}
+
+if ($name === "") {
     $_SESSION['message'] = "Item name is required.";
     $_SESSION['msg_type'] = "danger";
     header("Location: edit.php?id=$id");
     exit();
 }
 
-// get the current photo
 $result = mysqli_query($conn, "SELECT image FROM flavor WHERE flavor_id = $id");
 $old = mysqli_fetch_assoc($result);
+
+if (!$old) {
+    $_SESSION['message'] = "Menu item not found.";
+    $_SESSION['msg_type'] = "danger";
+    header("Location: index.php");
+    exit();
+}
+
 $image = $old['image'];
 
-// new photo (optional)
-if ($_FILES['image']['name'] != "") {
-    $type = $_FILES['image']['type'];
-    if ($type == "image/jpeg" || $type == "image/png" || $type == "image/webp") {
-        if (!is_dir("../../uploads")) {
-            mkdir("../../uploads");
-        }
-        $filename = time() . "_" . basename($_FILES['image']['name']);
-        move_uploaded_file($_FILES['image']['tmp_name'], "../../uploads/" . $filename) or die("Couldn't copy");
+if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+    $file = $_FILES['image'];
+    $type = $file['type'];
+    $allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
-        // remove the old photo file
-        if ($old['image'] && file_exists("../../" . $old['image'])) {
-            unlink("../../" . $old['image']);
-        }
-        $image = "uploads/" . $filename;
-    } else {
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $_SESSION['message'] = "Image upload failed. Please try again.";
+        $_SESSION['msg_type'] = "danger";
+        header("Location: edit.php?id=$id");
+        exit();
+    }
+
+    if (!in_array($type, $allowed, true)) {
         $_SESSION['message'] = "Wrong file type. Please upload a JPG, PNG, or WEBP image.";
         $_SESSION['msg_type'] = "danger";
         header("Location: edit.php?id=$id");
         exit();
     }
+
+    if (!is_dir("../../uploads")) {
+        mkdir("../../uploads", 0777, true);
+    }
+
+    $filename = time() . "_" . preg_replace('/[^A-Za-z0-9_.-]/', '_', basename($file['name']));
+    $target = "../../uploads/" . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $target)) {
+        $_SESSION['message'] = "Image upload failed. Please try again.";
+        $_SESSION['msg_type'] = "danger";
+        header("Location: edit.php?id=$id");
+        exit();
+    }
+
+    if ($old['image'] && file_exists("../../" . $old['image'])) {
+        unlink("../../" . $old['image']);
+    }
+
+    $image = "uploads/" . $filename;
 }
 
 $sql = "UPDATE flavor SET name = ?, description = ?, image = ?, is_available = ? WHERE flavor_id = ?";
@@ -50,5 +90,6 @@ mysqli_stmt_bind_param($stmt, 'sssii', $name, $description, $image, $available, 
 mysqli_stmt_execute($stmt);
 
 $_SESSION['message'] = "Menu item updated.";
+$_SESSION['msg_type'] = "success";
 header("Location: index.php");
 exit();

@@ -2,7 +2,16 @@
 /** @var mysqli $conn */
 session_start();
 include('../../includes/config.php');
-// TODO: check if admin is logged in
+include('../../includes/auth.php');
+
+require_admin();
+
+if (!isset($conn) || !$conn) {
+    $_SESSION['message'] = "Database connection failed. Please try again later.";
+    $_SESSION['msg_type'] = "danger";
+    header("Location: index.php");
+    exit();
+}
 
 $id = (int)$_GET['id'];
 $result = mysqli_query($conn, "SELECT * FROM flavor WHERE flavor_id = $id");

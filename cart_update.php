@@ -1,6 +1,16 @@
 <?php
 session_start();
-include('includes/config.php');
+include 'includes/config.php';
+include 'includes/auth.php';
+
+require_customer();
+
+if (!isset($conn) || !$conn) {
+    $_SESSION['message'] = 'Database connection failed. Please try again later.';
+    $_SESSION['msg_type'] = 'danger';
+    header('Location: /takoyaki-shop-infoman/menu.php#cartPanel');
+    exit();
+}
 
 // the cart is kept in the session, so guests can use it too
 if (!isset($_SESSION['cart'])) {
@@ -80,4 +90,5 @@ if ($action == "set_type") {
     }
 }
 
-header("Location: index.php#cartPanel");
+header('Location: /takoyaki-shop-infoman/menu.php#cartPanel');
+exit();
