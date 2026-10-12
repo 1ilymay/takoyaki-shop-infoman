@@ -1,4 +1,5 @@
 <?php
+/** @var mysqli $conn */
 // Set $page before including this file: menu, orders, account, admin
 $base = "/takoyaki";
 if (!isset($page)) {

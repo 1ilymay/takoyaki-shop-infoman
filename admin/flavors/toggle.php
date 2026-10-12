@@ -1,4 +1,5 @@
 <?php
+/** @var mysqli $conn */
 session_start();
 include('../../includes/config.php');
 // TODO: check if admin is logged in
