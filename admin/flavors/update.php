@@ -25,8 +25,29 @@ if ($id <= 0) {
     exit();
 }
 
+$errors = array();
+
 if ($name === "") {
-    $_SESSION['message'] = "Item name is required.";
+    $errors[] = "Item name is required.";
+} else {
+    if (strlen($name) < 2 || strlen($name) > 100) {
+        $errors[] = "Item name must be 2 to 100 characters.";
+    }
+    if (!preg_match("/^[a-zA-Z0-9 &'-]+$/", $name)) {
+        $errors[] = "Item name can only have letters, numbers, spaces, & ' and -.";
+    }
+}
+
+if (strlen($description) > 255) {
+    $errors[] = "Description must be 255 characters or less.";
+}
+
+if ($available !== 0 && $available !== 1) {
+    $errors[] = "Availability must be Available or Sold Out.";
+}
+
+if (count($errors) > 0) {
+    $_SESSION['message'] = implode(" ", $errors);
     $_SESSION['msg_type'] = "danger";
     header("Location: edit.php?id=$id");
     exit();

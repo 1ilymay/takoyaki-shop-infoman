@@ -8,9 +8,19 @@ require_customer();
 $page = 'menu';
 include 'includes/header.php';
 
+$search = "";
+if (isset($_GET['q'])) {
+    $search = trim($_GET['q']);
+}
+
 $flavors = false;
 if (isset($conn) && $conn) {
-    $flavors = mysqli_query($conn, 'SELECT * FROM flavor ORDER BY is_available DESC, name');
+    $like = "%" . $search . "%";
+    $sql = "SELECT * FROM flavor WHERE name LIKE ? OR description LIKE ? ORDER BY is_available DESC, name";
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "ss", $like, $like);
+    mysqli_stmt_execute($stmt);
+    $flavors = mysqli_stmt_get_result($stmt);
 }
 
 $first = null;
@@ -75,43 +85,37 @@ if ($orderType == 'delivery') {
 $total = $subtotal + $deliveryFee;
 ?>
 
-<div class="shop-quickbar">
-    <div class="category-strip">
-        <span class="chip active">Takoyaki</span>
-        <span class="chip">Classic</span>
-        <span class="chip">Specialty</span>
-        <span class="chip">Best Sellers</span>
-        <span class="chip">Add-ons</span>
-    </div>
-</div>
+<?php
+// hero background photo: put your photo in the images folder and name it hero.jpg (or .jpeg, .png, .webp)
+$heroImg = $base . '/images/takoyaki_logo.jpg';
+$heroClass = ' hero-fallback';
+foreach (array('jpg', 'jpeg', 'png', 'webp') as $ext) {
+    if (file_exists(__DIR__ . '/images/hero.' . $ext)) {
+        $heroImg = $base . '/images/hero.' . $ext;
+        $heroClass = '';
+        break;
+    }
+}
+?>
 
-<div class="promo-grid">
-    <div class="promo-card feature">
-        <div class="promo-copy">
-            <div class="eyebrow">Fresh off the griddle</div>
-            <h2>Hot takoyaki, made for sharing.</h2>
-            <p>Choose your favorite flavor and build the perfect bite.</p>
-            <a class="btn" href="#products">Order now</a>
-        </div>
-        <div class="promo-visual">
-            <img src="<?= $base ?>/images/takoyaki_logo.jpg" alt="Takoyaki">
-        </div>
-    </div>
-
-    <div class="promo-card mini">
-        <div class="eyebrow">Today’s deal</div>
-        <h3>30% off combo packs</h3>
-        <p>Perfect for sharing with friends.</p>
-    </div>
-
-    <div class="promo-card mini alt">
-        <div class="eyebrow">Chef’s pick</div>
-        <h3>Signature flavor</h3>
-        <p>Smoky, savory, and crispy every time.</p>
+<div class="hero-banner<?= $heroClass ?>" style="--hero-img: url('<?= $heroImg ?>');">
+    <div class="hero-copy">
+        <div class="eyebrow">Fresh off the griddle</div>
+        <h2>Hot takoyaki, made for sharing.</h2>
+        <p>Choose your favorite flavor and build the perfect bite.</p>
+        <a class="btn" href="#products">Order now</a>
     </div>
 </div>
 
 <?php include 'includes/alert.php'; ?>
+
+<form method="GET" action="menu.php" style="display:flex; gap:8px; margin-bottom:16px;">
+    <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" placeholder="Search flavors...">
+    <button type="submit">Search</button>
+    <?php if ($search != "") { ?>
+        <a class="btn ghost" href="menu.php">Clear</a>
+    <?php } ?>
+</form>
 
 <div class="layout" id="products">
     <section>
@@ -181,8 +185,8 @@ $total = $subtotal + $deliveryFee;
                             <?php } ?>
 
                             <?php if ($canOrder && $addons && mysqli_num_rows($addons) > 0) { ?>
-                                <div>
-                                    <label>Optional toppings and extras</label>
+                                <details class="toppings-box">
+                                    <summary>＋ Toppings and extras</summary>
                                     <div class="toppings">
                                         <?php while ($a = mysqli_fetch_assoc($addons)) { ?>
                                             <label class="topping">
@@ -191,7 +195,7 @@ $total = $subtotal + $deliveryFee;
                                             </label>
                                         <?php } ?>
                                     </div>
-                                </div>
+                                </details>
                             <?php } ?>
 
                             <div class="product-actions">
@@ -206,6 +210,19 @@ $total = $subtotal + $deliveryFee;
             ?>
         </div>
     </section>
+
+        <div class="side-col">
+        <div class="promo-card mini">
+            <div class="eyebrow">Today’s deal</div>
+            <h3>30% off combo packs</h3>
+            <p>Perfect for sharing with friends.</p>
+        </div>
+
+        <div class="promo-card mini alt">
+            <div class="eyebrow">Chef’s pick</div>
+            <h3>Signature flavor</h3>
+            <p>Smoky, savory, and crispy every time.</p>
+        </div>
 
     <aside class="panel cart-panel" id="cartPanel">
         <h2>Your Cart <span class="muted tiny">(<?= $cartCount ?> items)</span></h2>
@@ -273,6 +290,8 @@ $total = $subtotal + $deliveryFee;
             <div class="empty">Your cart is empty.<br><span class="tiny">Choose something delicious to get started.</span></div>
         <?php } ?>
     </aside>
+  </div>
 </div>
+
 
 <?php include 'includes/footer.php'; ?>

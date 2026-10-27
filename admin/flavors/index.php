@@ -90,6 +90,8 @@ if (isset($conn) && $conn) {
                             </td>
                             <td>
                                 <div class="actions">
+
+                                    <a class="btn small secondary" href="sizes.php?id=<?= $id ?>">Sizes</a>
                                     <a class="btn small secondary" href="edit.php?id=<?= $id ?>">Edit</a>
 
                                     <form action="toggle.php" method="POST" class="inline">

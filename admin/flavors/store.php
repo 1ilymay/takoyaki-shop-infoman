@@ -17,9 +17,31 @@ $name = trim($_POST['name'] ?? '');
 $description = trim($_POST['description'] ?? '');
 $available = isset($_POST['is_available']) ? (int)$_POST['is_available'] : 1;
 
+
 // validation
+$errors = array();
+
 if ($name === "") {
-    $_SESSION['message'] = "Item name is required.";
+    $errors[] = "Item name is required.";
+} else {
+    if (strlen($name) < 2 || strlen($name) > 100) {
+        $errors[] = "Item name must be 2 to 100 characters.";
+    }
+    if (!preg_match("/^[a-zA-Z0-9 &'-]+$/", $name)) {
+        $errors[] = "Item name can only have letters, numbers, spaces, & ' and -.";
+    }
+}
+
+if (strlen($description) > 255) {
+    $errors[] = "Description must be 255 characters or less.";
+}
+
+if ($available !== 0 && $available !== 1) {
+    $errors[] = "Availability must be Available or Sold Out.";
+}
+
+if (count($errors) > 0) {
+    $_SESSION['message'] = implode(" ", $errors);
     $_SESSION['msg_type'] = "danger";
     $_SESSION['old'] = $_POST;
     header("Location: create.php");
@@ -43,6 +65,14 @@ if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE)
 
     if (!in_array($type, $allowed, true)) {
         $_SESSION['message'] = "Wrong file type. Please upload a JPG, PNG, or WEBP image.";
+        $_SESSION['msg_type'] = "danger";
+        $_SESSION['old'] = $_POST;
+        header("Location: create.php");
+        exit();
+    }
+
+        if ($file['size'] > 2 * 1024 * 1024) {
+        $_SESSION['message'] = "Image must be 2MB or smaller.";
         $_SESSION['msg_type'] = "danger";
         $_SESSION['old'] = $_POST;
         header("Location: create.php");

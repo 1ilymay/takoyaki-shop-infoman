@@ -32,7 +32,7 @@ if (isset($_SESSION['old'])) {
 <?php include('../../includes/alert.php'); ?>
 
 <section class="panel narrow">
-    <form action="store.php" method="POST" enctype="multipart/form-data">
+    <form action="store.php" method="POST" enctype="multipart/form-data" novalidate>
         <div class="field">
             <label for="name">Item name</label>
             <input type="text" id="name" name="name" value="<?= htmlspecialchars($name) ?>">

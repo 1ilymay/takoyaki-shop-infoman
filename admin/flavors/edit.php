@@ -41,7 +41,7 @@ include('../../includes/adminHeader.php');
 <?php include('../../includes/alert.php'); ?>
 
 <section class="panel narrow">
-    <form action="update.php" method="POST" enctype="multipart/form-data">
+    <form action="update.php" method="POST" enctype="multipart/form-data" novalidate>
         <input type="hidden" name="id" value="<?= $id ?>">
         <div class="field">
             <label for="name">Item name</label>
